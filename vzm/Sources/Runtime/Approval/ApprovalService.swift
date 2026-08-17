@@ -104,6 +104,7 @@ actor ApprovalService {
     private func evaluate(request: ProxyApprovalRequest) -> EvaluationResult {
         var request = request
         let isRawTCP = request.type == "TCP_CONNECT"
+        let isGit = request.type.uppercased() == "GIT"
         let knownDomain = !isRawTCP && !request.domain.isEmpty && recognizedElementStore.contains(request.domain, type: .domain)
         let userAgents = ApprovalHeaderMasker.getUserAgents(for: request)
         let knownUserAgents = userAgents.filter { recognizedElementStore.contains($0, type: .userAgent) }
@@ -170,6 +171,12 @@ actor ApprovalService {
 
         var selectedEngine: SelectedEngine?
         for engine in engines {
+            // Git requests must always receive an explicit approval; the
+            // temporary "Approve Everything" mode must not bypass the prompt.
+            if isGit && engine is ManualTemporaryApprovalEngine {
+                continue
+            }
+
             switch engine.handle(request) {
             case .approved:
                 return .approved(request: request, reason: "engine \(engine.name)")
